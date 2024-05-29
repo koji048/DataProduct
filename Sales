@@ -1,0 +1,51 @@
+SELECT 
+    inv_hdr.cust_num AS 'Customer Code', 
+    custs.cust_seq AS 'Sold To Code', 
+    custs.name AS 'Sold To Name', 
+    custa.cust_seq AS 'Ship To Code', 
+    custa.name AS 'Ship To Name', 
+    inv_item.item AS 'Item Code', 
+    ISNULL(itemcust.end_user, item.description) AS 'Item Name', 
+    CONVERT(date, coitem.due_date, 101) AS 'Due Date', 
+    inv_hdr.inv_num AS 'Inv No.', 
+    CONVERT(date, inv_hdr.inv_date, 101) AS 'Inv Date', 
+    coitem.co_num AS 'Co No.', 
+    coitem.co_line AS 'Line', 
+    coitem.co_release AS 'Rel', 
+    CASE 
+        WHEN inv_hdr.bill_type = 'N' THEN 0 
+        ELSE inv_item.qty_invoiced 
+    END AS 'Qty Invoiced', 
+    inv_item.price AS 'Unit Price', 
+    ((inv_hdr.disc / 100) * (inv_item.qty_invoiced * inv_item.price * inv_hdr.exch_rate)) AS 'Discount', 
+    (inv_item.qty_invoiced * inv_item.price * inv_hdr.exch_rate) - 
+        ((inv_hdr.disc / 100) * (inv_item.qty_invoiced * inv_item.price * inv_hdr.exch_rate)) AS 'Amount', 
+    ISNULL(co.Uf_ERPP_PeriodBL, ' ') AS 'B/L Period', 
+    co.Uf_ERPP_BLDate AS 'B/L Date', 
+    ISNULL(co.Uf_ERPP_InvoiceType, ' ') AS 'Invoice Type Code', 
+    ISNULL(co.Uf_ERPP_InvoiceTypeDesc, ' ') AS 'Invoice Description',
+    (SELECT REPLACE(REPLACE(STUFF((SELECT ' ' + CAST(rv.note AS NVARCHAR(300)) 
+                                    FROM reportnotesview rv 
+                                    WHERE rv.IsInternalNote = '0' AND rv.RefRowPointer = co.RowPointer 
+                                    FOR XML PATH('')), 1, 1, ''), '&#x0D;', CHAR(13) + CHAR(10)), CHAR(13) + CHAR(10), '')) AS 'Note of CO Header',
+    (SELECT REPLACE(REPLACE(STUFF((SELECT ' ' + CAST(rv.note AS NVARCHAR(300)) 
+                                    FROM reportnotesview rv 
+                                    WHERE rv.IsInternalNote = '0' AND rv.RefRowPointer = coitem.RowPointer 
+                                    FOR XML PATH('')), 1, 1, ''), '&#x0D;', CHAR(13) + CHAR(10)), CHAR(13) + CHAR(10), '')) AS 'Note of CO Line'
+FROM 
+    inv_hdr 
+    LEFT JOIN custaddr ON inv_hdr.cust_num = custaddr.cust_num AND custaddr.cust_seq = inv_hdr.cust_seq 
+    LEFT JOIN inv_item ON inv_item.inv_num = inv_hdr.inv_num AND inv_item.inv_seq = inv_hdr.inv_seq 
+    INNER JOIN coitem ON coitem.co_num = inv_item.co_num AND coitem.co_line = inv_item.co_line AND coitem.co_release = inv_item.co_release 
+    INNER JOIN co ON co.co_num = coitem.co_num 
+    LEFT JOIN itemcust ON itemcust.item = coitem.item AND itemcust.cust_item = coitem.cust_item AND itemcust.cust_num = inv_hdr.cust_num 
+    INNER JOIN taxcode ON taxcode.tax_code = co.tax_code1 
+    LEFT JOIN item ON item.item = inv_item.item 
+    LEFT JOIN custaddr custs ON custs.cust_num = inv_hdr.cust_num AND custs.cust_seq = 0 
+    LEFT JOIN custaddr custa ON custa.cust_num = inv_hdr.cust_num AND custa.cust_seq = inv_hdr.cust_seq 
+WHERE 
+    inv_hdr.cust_num BETWEEN '0000' AND 'zzzzz' 
+    AND inv_item.item BETWEEN '100-0000-000' AND '200-0000-000' 
+    AND inv_hdr.inv_date BETWEEN '2020-04-01 00:00:00.000' AND '2025-03-31 23:59:59.999' 
+    AND LEFT(inv_item.item, 1) = '1' 
+    AND item.product_code NOT LIKE '5%'
